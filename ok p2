@@ -1,0 +1,58 @@
+try:pip install
+    import torch
+    from diffusers import StableVideoDiffusionPipeline
+    from PIL import Image
+    import argparse
+    import os
+except ModuleNotFoundError as e:
+    print(f"Error: {e}. Please ensure all dependencies are installed with: pip install torch diffusers pillow")
+    exit(1)
+
+def generate_video(image_path, output_path, steps=30):
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    
+    print(f"Using device: {device}")
+    if device == "cpu":
+        print("Warning: Running on CPU. This may be extremely slow. Consider using a machine with a GPU.")
+    
+    print("Loading Stable Video Diffusion Model...")
+    try:
+        model = StableVideoDiffusionPipeline.from_pretrained(
+            "stabilityai/stable-video-diffusion-img2vid", 
+            torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32
+        ).to(device)
+    except Exception as e:
+        print(f"Model loading failed: {e}")
+        exit(1)
+    
+    try:
+        image = Image.open(image_path).convert("RGB")
+    except Exception as e:
+        print(f"Error loading image: {e}")
+        exit(1)
+    
+    print("Generating video...")
+    try:
+        video_output = model(image, num_inference_steps=steps)
+        if hasattr(video_output, 'frames'):
+            video_frames = video_output.frames
+        else:
+            raise ValueError("Model output does not contain 'frames'. Check model compatibility.")
+    except Exception as e:
+        print(f"Error generating video: {e}")
+        exit(1)
+    
+    os.makedirs(output_path, exist_ok=True)
+    for i, frame in enumerate(video_frames):
+        frame.save(os.path.join(output_path, f"frame_{i:03d}.png"))
+    
+    print(f"✅ Video frames saved to {output_path}")
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--image", type=str, required=True, help="Path to input image")
+    parser.add_argument("--output", type=str, default="output_video", help="Path to output frames directory")
+    parser.add_argument("--steps", type=int, default=30, help="Number of inference steps for video generation")
+    
+    args = parser.parse_args()
+    generate_video(args.image, args.output, args.steps)
